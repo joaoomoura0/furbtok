@@ -374,6 +374,11 @@ const PERFIL_A_CADA = 15;
   $('som').addEventListener('click', () => {
     mudo = !mudo; $('som').textContent = mudo ? '🔇 Ativar som' : '🔊 Som ligado';
     aplicarSom(); if (!mudo && player && playerPronto) { try { player.playVideo(); } catch (e) {} }
+    if (!mudo) setTimeout(() => {
+      // alguns celulares (principalmente iPhone) não deixam ligar o som de fora do vídeo: volta pro mudo e continua tocando
+      let ok = false; try { ok = player && playerPronto && player.getPlayerState() === 1 && !player.isMuted(); } catch (e) {}
+      if (!ok && !mudo) { mudo = true; aplicarSom(); try { player.playVideo(); } catch (e) {} $('som').textContent = '🔇 Som indisponível aqui'; }
+    }, 1800);
   });
   // enquanto o dedo está rolando, mostra a miniatura; o vídeo volta quando o próximo começa a tocar
   let rolando = 0;
