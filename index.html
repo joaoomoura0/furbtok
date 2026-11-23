@@ -289,6 +289,7 @@ const PERFIL_A_CADA = 15;
         onStateChange: (ev) => {
           if (ev.data === YT.PlayerState.PLAYING) {
             let vid = null; try { vid = player.getVideoData().video_id; } catch (e) {}
+            if (!mudo) { try { if (player.isMuted()) player.unMute(); } catch (e) {} }
             if (atual && atual.dataset.id === idPedido && (!vid || vid === idPedido) && Math.abs(atual.getBoundingClientRect().top) < 2) mostrarVideo();
           }
           else if (ev.data === YT.PlayerState.ENDED) { try { player.seekTo(0, true); player.playVideo(); } catch (e) {} }
@@ -309,9 +310,9 @@ const PERFIL_A_CADA = 15;
     });
     clearTimeout(vigia);
     vigia = setTimeout(() => {
-      // se o navegador bloqueou o vídeo com som, volta para o mudo e tenta de novo
-      if (atual === el && !feedEl.classList.contains('tocando') && !mudo && player && playerPronto) {
-        mudo = true; $('som').textContent = '🔇 Toque para ativar o som'; aplicarSom(); try { player.playVideo(); } catch (e) {}
+      // se o vídeo ainda não começou, só tenta tocar de novo, sem mexer no som
+      if (atual === el && !feedEl.classList.contains('tocando') && player && playerPronto) {
+        aplicarSom(); try { player.playVideo(); } catch (e) {}
       }
     }, 2500);
   }
