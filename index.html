@@ -40,12 +40,18 @@ input[type=text] { background: var(--panel); border: 1px solid var(--line); bord
 .mini a { color: var(--cyan); }
 
 /* feed */
-.feed { position: fixed; inset: 0; overflow-y: scroll; scroll-snap-type: y mandatory; overscroll-behavior: contain; scrollbar-width: none; background: #000; }
+/* Um único player fixo atrás do feed: o mesmo player troca de vídeo, então o som liberado continua valendo. */
+.camada { position: fixed; inset: 0; z-index: 1; background: #000; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.camada.visivel { opacity: 1; }
+.camada iframe, .camada > div { width: 100%; height: 100%; border: 0; }
+.feed { position: fixed; inset: 0; z-index: 2; overflow-y: scroll; scroll-snap-type: y mandatory; overscroll-behavior: contain; scrollbar-width: none; }
 .feed::-webkit-scrollbar { display: none; }
-.clip { height: 100%; scroll-snap-align: start; scroll-snap-stop: always; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; background: #000; }
-.clip .tela { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-.clip .tela iframe, .clip .tela > div { width: 100%; height: 100%; border: 0; pointer-events: none; }
-.clip .carregando { position: absolute; color: var(--muted); font-size: 14px; }
+.clip { height: 100%; scroll-snap-align: start; scroll-snap-stop: always; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; }
+.clip .miniatura { position: absolute; inset: 0; background: #000; transition: opacity .15s; }
+.clip .miniatura img { width: 100%; height: 100%; object-fit: cover; filter: brightness(.75); }
+.feed.tocando .clip.on .miniatura { opacity: 0; }
+.clip .carregando { position: absolute; z-index: 1; color: rgba(255,255,255,.8); font-size: 14px; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.feed.tocando .clip.on .carregando { display: none; }
 .clip .capa { position: absolute; inset: 0; z-index: 2; }
 .clip .erro { position: absolute; z-index: 3; color: var(--muted); font-size: 15px; text-align: center; padding: 0 24px; }
 .topo { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 8px;
@@ -127,6 +133,7 @@ input[type=text] { background: var(--panel); border: 1px solid var(--line); bord
 </section>
 
 <div class="topo" id="topo" hidden><div class="marca">FURB<span>Tok</span></div><div class="bts"><button type="button" id="som">🔇 Ativar som</button><button type="button" id="verPerfil">Meu perfil</button></div></div>
+<div class="camada" id="camada" hidden><div id="playerAlvo"></div></div>
 <main class="feed" id="feed" hidden></main>
 <div class="status" id="status" hidden></div>
 
@@ -226,7 +233,7 @@ const PERFIL_A_CADA = 15;
   $('formEntrada').addEventListener('submit', (e) => {
     e.preventDefault();
     S.nome = $('nome').value.trim().slice(0, 30); ls.set('furbtok_nome', S.nome);
-    $('entrada').hidden = true; $('feed').hidden = false; $('topo').hidden = false; $('status').hidden = false;
+    $('entrada').hidden = true; $('feed').hidden = false; $('camada').hidden = false; $('topo').hidden = false; $('status').hidden = false;
     if (!iniciado) { iniciado = true; carregarApiYT(); adicionarLote(); }
     sujo = true; salvar();
   });
@@ -245,9 +252,12 @@ const PERFIL_A_CADA = 15;
     const [cat, id] = v;
     const el = document.createElement('article');
     el.className = 'clip'; el.dataset.cat = cat; el.dataset.id = id;
-    el.innerHTML = '<div class="tela"><span class="carregando">carregando…</span></div><div class="capa"></div><div class="coracao" aria-hidden="true">❤️</div>' +
+    el.innerHTML = '<div class="miniatura"><img alt="" loading="lazy" decoding="async"></div><span class="carregando">carregando…</span><div class="capa"></div><div class="coracao" aria-hidden="true">❤️</div>' +
       '<div class="info"><div class="tag"></div></div>' +
       '<div class="acoes"><button class="acao curtir" type="button" aria-label="Curtir">' + SVG_CORACAO + '<span>Curtir</span></button></div>';
+    const img = el.querySelector('.miniatura img');
+    img.onerror = () => { img.onerror = null; img.src = 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg'; };
+    img.src = 'https://i.ytimg.com/vi/' + id + '/oardefault.jpg';
     el.querySelector('.tag').textContent = '#' + TEMAS[cat].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const pintar = () => el.querySelector('.curtir').classList.toggle('curtido', curtidos.has(id));
     const alternar = (forcar) => {
@@ -265,25 +275,47 @@ const PERFIL_A_CADA = 15;
     return el;
   }
 
-  function tocar(el) {
-    if (el._player || !el.dataset.id) return;
-    quandoYT(() => {
-      if (el._player || atual !== el) return;
-      const alvo = document.createElement('div'); el.querySelector('.tela').replaceChildren(alvo);
-      el._player = new YT.Player(alvo, {
-        videoId: el.dataset.id,
-        playerVars: { autoplay: 1, mute: 1, controls: 0, playsinline: 1, loop: 1, playlist: el.dataset.id, rel: 0, modestbranding: 1, fs: 0, iv_load_policy: 3, disablekb: 1 },
-        events: {
-          onReady: (ev) => { try { if (mudo) ev.target.mute(); else ev.target.unMute(); ev.target.playVideo(); } catch (e) {} },
-          onError: () => { const er = document.createElement('div'); er.className = 'erro'; er.textContent = 'Vídeo indisponível. Role para o próximo.'; el.appendChild(er); el.dataset.falhou = '1'; }
-        }
-      });
+  /* Um player só, reaproveitado: trocar de vídeo com loadVideoById mantém o som liberado pelo toque no botão. */
+  let player = null, playerPronto = false, idPedido = null, vigia = 0;
+  const feedEl = $('feed'), camada = $('camada');
+  function esconderVideo() { feedEl.classList.remove('tocando'); camada.classList.remove('visivel'); }
+  function mostrarVideo() { feedEl.classList.add('tocando'); camada.classList.add('visivel'); }
+  function criarPlayer(id) {
+    player = new YT.Player('playerAlvo', {
+      videoId: id,
+      playerVars: { autoplay: 1, mute: 1, controls: 0, playsinline: 1, rel: 0, modestbranding: 1, fs: 0, iv_load_policy: 3, disablekb: 1 },
+      events: {
+        onReady: () => { playerPronto = true; aplicarSom(); try { if (idPedido && idPedido !== id) player.loadVideoById(idPedido); else player.playVideo(); } catch (e) {} },
+        onStateChange: (ev) => {
+          if (ev.data === YT.PlayerState.PLAYING) {
+            let vid = null; try { vid = player.getVideoData().video_id; } catch (e) {}
+            if (atual && atual.dataset.id === idPedido && (!vid || vid === idPedido) && Math.abs(atual.getBoundingClientRect().top) < 2) mostrarVideo();
+          }
+          else if (ev.data === YT.PlayerState.ENDED) { try { player.seekTo(0, true); player.playVideo(); } catch (e) {} }
+        },
+        onError: () => { if (atual && atual.dataset.id === idPedido) { const er = document.createElement('div'); er.className = 'erro'; er.textContent = 'Vídeo indisponível. Role para o próximo.'; atual.appendChild(er); atual.dataset.falhou = '1'; esconderVideo(); } }
+      }
     });
   }
-  function parar(el) {
-    if (el._player) { try { el._player.destroy(); } catch (e) {} el._player = null; }
-    const t = el.querySelector('.tela'); if (t) t.replaceChildren(Object.assign(document.createElement('span'), { className: 'carregando', textContent: 'carregando…' }));
+  function aplicarSom() { if (!player || !playerPronto) return; try { if (mudo) player.mute(); else player.unMute(); } catch (e) {} }
+  function tocar(el) {
+    const id = el.dataset.id; if (!id) return;
+    idPedido = id; esconderVideo();
+    quandoYT(() => {
+      if (atual !== el) return;
+      if (!player) { criarPlayer(id); return; }
+      if (!playerPronto) return;
+      try { player.loadVideoById(id); aplicarSom(); } catch (e) {}
+    });
+    clearTimeout(vigia);
+    vigia = setTimeout(() => {
+      // se o navegador bloqueou o vídeo com som, volta para o mudo e tenta de novo
+      if (atual === el && !feedEl.classList.contains('tocando') && !mudo && player && playerPronto) {
+        mudo = true; $('som').textContent = '🔇 Toque para ativar o som'; aplicarSom(); try { player.playVideo(); } catch (e) {}
+      }
+    }, 2500);
   }
+  function parar(el) { if (atual === el || !atual) { esconderVideo(); try { if (player && playerPronto) player.pauseVideo(); } catch (e) {} } }
 
   function criarPerfil() {
     const el = document.createElement('article');
@@ -329,11 +361,11 @@ const PERFIL_A_CADA = 15;
     if (!atual) return;
     const el = atual, c = el.dataset.cat;
     if (c && !el.dataset.falhou) { acumular(); if ((performance.now() - inicioVisao) / 1000 < 2) S.pulos[c] = (S.pulos[c] || 0) + 1; S.vistos++; sujo = true; }
-    atual = null; parar(el);
+    el.classList.remove('on'); parar(el); atual = null;
   }
   function ativar(el) {
     if (atual === el) return;
-    fechar(); atual = el; inicio = inicioVisao = performance.now(); somaVisao = 0;
+    fechar(); atual = el; el.classList.add('on'); inicio = inicioVisao = performance.now(); somaVisao = 0;
     if (el.dataset.perfil) { pintarPerfil(el); sujo = true; salvar(); } else tocar(el);
     const todos = $('feed').children; if ([...todos].indexOf(el) > todos.length - 4) adicionarLote();
   }
@@ -341,8 +373,15 @@ const PERFIL_A_CADA = 15;
 
   $('som').addEventListener('click', () => {
     mudo = !mudo; $('som').textContent = mudo ? '🔇 Ativar som' : '🔊 Som ligado';
-    if (atual && atual._player) { try { if (mudo) atual._player.mute(); else { atual._player.unMute(); atual._player.playVideo(); } } catch (e) {} }
+    aplicarSom(); if (!mudo && player && playerPronto) { try { player.playVideo(); } catch (e) {} }
   });
+  // enquanto o dedo está rolando, mostra a miniatura; o vídeo volta quando o próximo começa a tocar
+  let rolando = 0;
+  feedEl.addEventListener('scroll', () => {
+    if (atual && Math.abs(atual.getBoundingClientRect().top) > 2) esconderVideo();
+    clearTimeout(rolando);
+    rolando = setTimeout(() => { if (atual && !atual.dataset.perfil && Math.abs(atual.getBoundingClientRect().top) < 2 && atual.dataset.id === idPedido && player && playerPronto && player.getPlayerState && player.getPlayerState() === 1) mostrarVideo(); }, 150);
+  }, { passive: true });
   $('verPerfil').addEventListener('click', () => {
     const ps = [...$('feed').querySelectorAll('.perfil')]; const p = ps.find((x) => x.getBoundingClientRect().top > 10) || ps[0];
     if (p) p.scrollIntoView({ behavior: 'smooth' });
@@ -414,8 +453,8 @@ const PERFIL_A_CADA = 15;
   function rota() {
     const p = location.hash === '#painel';
     $('painel').hidden = !p;
-    if (p) { $('entrada').hidden = true; $('feed').hidden = true; $('topo').hidden = true; $('status').hidden = true; fechar(); ligarPainel(); }
-    else if (iniciado) { $('feed').hidden = false; $('topo').hidden = false; $('status').hidden = false; }
+    if (p) { $('entrada').hidden = true; $('feed').hidden = true; $('camada').hidden = true; $('topo').hidden = true; $('status').hidden = true; fechar(); ligarPainel(); }
+    else if (iniciado) { $('feed').hidden = false; $('camada').hidden = false; $('topo').hidden = false; $('status').hidden = false; }
     else { $('entrada').hidden = false; }
   }
   window.addEventListener('hashchange', rota); rota();
