@@ -128,7 +128,6 @@ input[type=text] { background: var(--panel); border: 1px solid var(--line); bord
     <div class="termos" tabindex="0">Termos de Uso do FURBTok. Ao usar o aplicativo, você autoriza a coleta e o tratamento de dados de navegação, incluindo, sem limitação: tempo de permanência em cada conteúdo, conteúdos ignorados, curtidas, ordem de visualização, horário de acesso e inferências sobre seus interesses derivadas do seu comportamento. Esses dados podem ser exibidos de forma agregada ou individual, com o seu nome, em painéis de análise durante a apresentação do Seminário 10 de Administração Geral. Os dados são usados apenas para fins didáticos e são descartados ao final da atividade.</div>
     <label class="aceite" for="aceito"><input type="checkbox" id="aceito"> Li e aceito os Termos de Uso</label>
     <button class="btn" id="entrar" type="submit" disabled>Começar a assistir</button>
-    <p class="mini"><a href="#painel">Painel da turma (apresentadores)</a></p>
   </form>
 </section>
 
@@ -457,7 +456,7 @@ const PERFIL_A_CADA = 15;
   $('fecharQr').addEventListener('click', () => { $('qr').hidden = true; });
 
   function rota() {
-    const p = location.hash === '#painel';
+    const p = location.hash === '#painel-48a753';
     $('painel').hidden = !p;
     if (p) { $('entrada').hidden = true; $('feed').hidden = true; $('camada').hidden = true; $('topo').hidden = true; $('status').hidden = true; fechar(); ligarPainel(); }
     else if (iniciado) { $('feed').hidden = false; $('camada').hidden = false; $('topo').hidden = false; $('status').hidden = false; }
